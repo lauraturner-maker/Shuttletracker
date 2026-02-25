@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novant Health Shuttle Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&family=Merriweather:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            /* Novant Health Brand Colors */
+            --novant-purple: #512d6d;
+            --novant-dark: #301b41;
+            --novant-gray: #e6e6e6;
+            --novant-accent: #78479e;
+            
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-500: #64748B;
+            --gray-700: #334155;
+            --gray-900: #0F172A;
+            --success: #059669;
+            --warning: #D97706;
+            
+            /* Updated shadows to use purple RGB (81, 45, 109) */
+            --shadow-md: 0 4px 12px rgba(81, 45, 109, 0.08);
+            --shadow-lg: 0 12px 32px rgba(81, 45, 109, 0.12);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 16px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--gray-50) 0%, var(--novant-gray) 100%);
+            min-height: 100vh;
+            color: var(--gray-900);
+            line-height: 1.5;
+        }
+        .widget-container {
+            max-width: 520px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background: var(--white);
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            flex-direction: column;
+        }
+        @media (min-width: 768px) {
+            body { padding: 24px; }
+            .widget-container {
+                min-height: auto;
+                border-radius: var(--radius-lg);
+                margin-top: 20px;
+                margin-bottom: 20px;
+                overflow: hidden;
+            }
+        }
+        .header {
+            background: linear-gradient(135deg, var(--novant-dark) 0%, var(--novant-purple) 100%);
+            padding: 20px 20px 16px;
+            color: var(--white);
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+        }
+        .header-title {
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+        }
+        .header-subtitle {
+            font-size: 0.875rem;
+            opacity: 0.85;
+            font-weight: 300;
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 12px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #4ADE80;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .tab-nav {
+            display: flex;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 14px 12px;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--gray-500);
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .tab-btn:hover {
+            color: var(--novant-purple);
+            background: var(--novant-gray);
+        }
+        .tab-btn.active {
+            color: var(--novant-purple);
+            background: var(--white);
+        }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--novant-purple);
+            border-radius: 3px 3px 0 0;
+        }
+        .tab-btn svg { width: 18px; height: 18px; }
+        .route-selector {
+            padding: 16px 20px;
+            background: var(--white);
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .route-selector-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--gray-500);
+            margin-bottom: 10px;
+        }
+        .route-cards { display: flex; gap: 10px; }
+        .route-card {
+            flex: 1;
+            padding: 14px;
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            background: var(--white);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+        .route-card:hover {
+            border-color: var(--novant-accent);
+            background: var(--gray-50);
+        }
+        .route-card.active {
+            border-color: var(--novant-purple);
+            background: var(--gray-50);
+            box-shadow: 0 0 0 3px rgba(81, 45, 109, 0.1);
+        }
+        .route-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .route-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.75rem;
+            color: var(--white);
+        }
+        .route-icon.presbyterian { background: var(--novant-purple); }
+        .route-icon.charlotte { background: var(--novant-dark); }
+        .route-card-name { font-weight: 600; font-size: 0.9rem; color: var(--gray-900); }
+        .route-card-time { font-size: 0.8rem; color: var(--gray-500); }
+        .route-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 3px 8px;
+            border-radius: 10px;
+            margin-top: 8px;
+        }
+        .route-status.running { background: rgba(5, 150, 105, 0.1); color: var(--success); }
+        .route-status.scheduled { background: rgba(217, 119, 6, 0.1); color: var(--warning); }
+        .content { flex: 1; overflow-y: auto; }
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .map-container { position: relative; }
+        #interactive-map { 
+            height: 320px; 
+            width: 100%; 
+            z-index: 1; 
+            background: var(--gray-100);
+        }
+        .map-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--gray-500);
+        }
+        .map-legend {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            background: var(--white);
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-md);
+            z-index: 1000;
+            font-size: 0.75rem;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .legend-item:last-child { margin-bottom: 0; }
+        .legend-line { width: 20px; height: 4px; border-radius: 2px; }
+        .legend-line.presbyterian { background: var(--novant-purple); }
+        .legend-line.charlotte { background: var(--novant-dark); }
+        .legend-shuttle {
+            width: 16px;
+            height: 16px;
+            background: var(--novant-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .legend-shuttle svg { width: 10px; height: 10px; fill: white; }
+        .leaflet-popup-content-wrapper { border-radius: var(--radius-md) !important; }
+        .leaflet-popup-content { margin: 12px 16px !important; font-family: 'Source Sans Pro', sans-serif !important; }
+        .popup-title { font-weight: 600; font-size: 0.9rem; color: var(--gray-900); margin-bottom: 4px; }
+        .popup-time { font-size: 0.8rem; color: var(--gray-500); }
+        .popup-eta {
+            display: inline-block;
+            background: rgba(5, 150, 105, 0.1);
+            color: var(--success);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-top: 6px;
+        }
+        .stops-panel {
+            padding: 16px 20px;
+            background: var(--gray-50);
+            border-top: 1px solid var(--gray-200);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .stops-panel-header {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--gray-500);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .stop-list-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: var(--white);
+            border-radius: var(--radius-sm);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid var(--gray-200);
+        }
+        .stop-list-item:hover { border-color: var(--novant-accent); background: var(--gray-50); }
+        .stop-list-item.active { border-color: var(--novant-purple); background: var(--gray-50); }
+        .stop-list-item:last-child { margin-bottom: 0; }
+        .stop-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--gray-200);
+            color: var(--gray-700);
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .stop-list-item.active .stop-number,
+        .stop-list-item.passed .stop-number { background: var(--novant-purple); color: var(--white); }
+        .stop-list-info { flex: 1; min-width: 0; }
+        .stop-list-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--gray-900);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .stop-list-time { font-size: 0.75rem; color: var(--gray-500); }
+        .stop-list-eta {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--success);
+            background: rgba(5, 150, 105, 0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+        .schedule-container { padding: 16px 20px; }
+        .schedule-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .schedule-title { font-weight: 700; font-size: 1rem; color: var(--gray-900); }
+        .schedule-date { font-size: 0.8rem; color: var(--gray-500); }
+        .schedule-table {
+            background: var(--white);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            border: 1px solid var(--gray-200);
+        }
+        .schedule-row {
+            display: flex;
+            border-bottom: 1px solid var(--gray-100);
+            transition: background 0.2s ease;
+        }
+        .schedule-row:last-child { border-bottom: none; }
+        .schedule-row:hover { background: var(--gray-50); }
+        .schedule-row.header { background: var(--novant-dark); color: var(--white); }
+        .schedule-row.header:hover { background: var(--novant-dark); }
+        .schedule-cell { flex: 1; padding: 12px 10px; font-size: 0.8rem; }
+        .schedule-row.header .schedule-cell {
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .schedule-cell.stop-col { flex: 2; }
+        .schedule-cell.time-col { text-align: center; font-weight: 600; color: var(--novant-purple); }
+        .schedule-row.header .schedule-cell.time-col { color: var(--white); }
+        .trip-divider {
+            background: var(--novant-gray);
+            padding: 8px 14px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--novant-dark);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .info-section { padding: 16px 20px; }
+        .info-card {
+            background: var(--gray-50);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .info-card:last-child { margin-bottom: 0; }
+        .info-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--novant-gray);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .info-icon svg { width: 20px; height: 20px; stroke: var(--novant-purple); fill: none; }
+        .info-content h4 { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+        .info-content p { font-size: 0.8rem; color: var(--gray-500); line-height: 1.4; }
+        .footer {
+            padding: 16px 20px;
+            background: var(--gray-50);
+            border-top: 1px solid var(--gray-200);
+            text-align: center;
+        }
+        .footer-text { font-size: 0.75rem; color: var(--gray-500); }
+        .last-updated {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: 0.7rem;
+            color: var(--gray-500);
+        }
+        .last-updated svg { width: 12px; height: 12px; stroke: currentColor; fill: none; }
+        @media (max-width: 400px) {
+            .header-title { font-size: 1.25rem; }
+            .route-cards { flex-direction: column; }
+            .route-card { display: flex; align-items: center; gap: 12px; }
+            .route-card-header { margin-bottom: 0; }
+            .route-status { margin-top: 0; margin-left: auto; }
+            .schedule-cell { padding: 10px 6px; font-size: 0.75rem; }
+            #interactive-map { height: 280px; }
+            .tab-btn { padding: 12px 8px; font-size: 0.75rem; }
+            .tab-btn svg { width: 16px; height: 16px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        .tab-btn:focus-visible,
+        .route-card:focus-visible,
+        .stop-list-item:focus-visible { outline: 2px solid var(--novant-purple); outline-offset: 2px; }
+        
+        /* Custom marker styles */
+        .custom-stop-marker { background: transparent !important; border: none !important; }
+        .shuttle-marker { background: transparent !important; border: none !important; }
+    </style>
+</head>
+<body>
+    <div class="widget-container">
+        <header class="header">
+            <h1 class="header-title">Shuttle Tracker</h1>
+            <p class="header-subtitle">Novant Health Transportation Services</p>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>Live Tracking Active</span>
+            </div>
+        </header>
+
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="map">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                Map
+            </button>
+            <button class="tab-btn" data-tab="schedule">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                Schedule
+            </button>
+            <button class="tab-btn" data-tab="info">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                Info
+            </button>
+        </nav>
+
+        <div class="route-selector">
+            <div class="route-selector-label">Select Route</div>
+            <div class="route-cards">
+                <button class="route-card active" data-route="presbyterian">
+                    <div class="route-card-header">
+                        <div class="route-icon presbyterian">P</div>
+                        <div>
+                            <div class="route-card-name">Presbyterian</div>
+                            <div class="route-card-time">6:00 AM - 9:00 AM</div>
+                        </div>
+                    </div>
+                    <span class="route-status running">
+                        <span class="status-dot" style="width:6px;height:6px;"></span>
+                        Running
+                    </span>
+                </button>
+                <button class="route-card" data-route="charlotte">
+                    <div class="route-card-header">
+                        <div class="route-icon charlotte">FC</div>
+                        <div>
+                            <div class="route-card-name">First Charlotte</div>
+                            <div class="route-card-time">6:00 PM - 10:00 PM</div>
+                        </div>
+                    </div>
+                    <span class="route-status scheduled">Scheduled</span>
+                </button>
+            </div>
+        </div>
+
+        <main class="content">
+            <div class="tab-content active" id="map-tab">
+                <div class="map-container">
+                    <div id="interactive-map">
+                        <div class="map-loading" id="map-loading">
+                            <p>Loading map...</p>
+                        </div>
+                    </div>
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <div class="legend-line presbyterian"></div>
+                            <span>Presbyterian</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line charlotte"></div>
+                            <span>First Charlotte</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-shuttle">
+                                <svg viewBox="0 0 24 24"><path fill="white" d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"></path></svg>
+                            </div>
+                            <span>Shuttle</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="stops-panel">
+                    <div class="stops-panel-header">
+                        <span>Route Stops</span>
+                        <span id="stop-count"></span>
+                    </div>
+                    <div id="stop-list-panel"></div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="schedule-tab">
+                <div class="schedule-container">
+                    <div class="schedule-header">
+                        <span class="schedule-title" id="schedule-route-name">Presbyterian Schedule</span>
+                        <span class="schedule-date" id="current-date"></span>
+                    </div>
+                    <div class="schedule-table" id="schedule-table"></div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="info-tab">
+                <div class="info-section">
+                    <div class="info-card">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                        </div>
+                        <div class="info-content">
+                            <h4>Operating Hours</h4>
+                            <p><strong>Presbyterian:</strong> 6:00 AM - 9:00 AM<br>
+                            <strong>First Charlotte:</strong> 6:00 PM - 10:00 PM<br>
+                            Monday through Friday only.</p>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24" stroke-width="2">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                            </svg>
+                        </div>
+                        <div class="info-content">
+                            <h4>Contact Transportation</h4>
+                            <p>For questions or assistance, contact Novant Health Transportation Services at ext. 4-RIDE.</p>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-icon">
+                            <svg viewBox="0 0 24 24" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                        </div>
+                        <div class="info-content">
+                            <h4>Service Alerts</h4>
+                            <p>No current service disruptions. All routes operating on normal schedule.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p class="footer-text">Novant Health Transportation Services</p>
+            <div class="last-updated">
+                <svg viewBox="0 0 24 24" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                <span id="last-updated-time">Updated just now</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    (function() {
+        'use strict';
+        
+        // Centered around Charlotte, NC to make the map look authentic
+        var CAMPUS_CENTER = [35.2165, -80.8266];
+        
+        var routes = {
+            presbyterian: {
+                name: 'Presbyterian',
+                hours: '6:00 AM - 9:00 AM',
+                status: 'running',
+                color: '#512d6d',
+                stops: [
+                    { name: 'Employee Parking Deck', coords: [35.2135, -80.8286], times: ['6:00', '6:30', '7:00', '7:30', '8:00', '8:30'] },
+                    { name: 'Cancer Center', coords: [35.2145, -80.8255], times: ['6:04', '6:34', '7:04', '7:34', '8:04', '8:34'] },
+                    { name: 'Presbyterian Main', coords: [35.2165, -80.8266], times: ['6:08', '6:38', '7:08', '7:38', '8:08', '8:38'] },
+                    { name: 'Emergency Services', coords: [35.2175, -80.8246], times: ['6:12', '6:42', '7:12', '7:42', '8:12', '8:42'] },
+                    { name: 'Heart & Vascular', coords: [35.2185, -80.8276], times: ['6:18', '6:48', '7:18', '7:48', '8:18', '8:48'] }
+                ],
+                currentStop: 2
+            },
+            charlotte: {
+                name: 'First Charlotte',
+                hours: '6:00 PM - 10:00 PM',
+                status: 'scheduled',
+                color: '#301b41',
+                stops: [
+                    { name: 'First Charlotte Clinic', coords: [35.2271, -80.8431], times: ['18:00', '18:40', '19:20', '20:00', '20:40', '21:20'] },
+                    { name: 'Uptown Imaging Center', coords: [35.2260, -80.8420], times: ['18:05', '18:45', '19:25', '20:05', '20:45', '21:25'] },
+                    { name: 'Specialty Center', coords: [35.2250, -80.8400], times: ['18:10', '18:50', '19:30', '20:10', '20:50', '21:30'] },
+                    { name: 'Medical Group', coords: [35.2240, -80.8410], times: ['18:14', '18:54', '19:34', '20:14', '20:54', '21:34'] },
+                    { name: 'Parking Structure C', coords: [35.2265, -80.8440], times: ['18:22', '19:02', '19:42', '20:22', '21:02', '21:42'] }
+                ],
+                currentStop: 0
+            }
+        };
+
+        var currentRoute = 'presbyterian';
+        var map = null;
+        var routeLayer = null;
+        var markersLayer = null;
+        var stopMarkers = [];
+        var mapInitialized = false;
+
+        function formatTime(time) {
+            var parts = time.split(':');
+            var hours = parseInt(parts[0], 10);
+            var minutes = parts[1];
+            var period = hours >= 12 ? 'PM' : 'AM';
+            var displayHours = hours % 12 || 12;
+            return displayHours + ':' + minutes + ' ' + period;
+        }
+
+        function setCurrentDate() {
+            var now = new Date();
+            var options = { weekday: 'short', month: 'short', day: 'numeric' };
+            var dateEl = document.getElementById('current-date');
+            if (dateEl) {
+                dateEl.textContent = now.toLocaleDateString('en-US', options);
+            }
+        }
+
+        function initMap() {
+            if (typeof L === 'undefined') {
+                var loadingEl = document.getElementById('map-loading');
+                if (loadingEl) {
+                    loadingEl.innerHTML = '<p>Map requires network access.<br>Schedule and stops available below.</p>';
+                }
+                return;
+            }
+
+            try {
+                var loadingEl = document.getElementById('map-loading');
+                if (loadingEl) {
+                    loadingEl.style.display = 'none';
+                }
+
+                map = L.map('interactive-map', {
+                    center: CAMPUS_CENTER,
+                    zoom: 15,
+                    zoomControl: true,
+                    scrollWheelZoom: true
+                });
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap',
+                    maxZoom: 19
+                }).addTo(map);
+
+                routeLayer = L.layerGroup().addTo(map);
+                markersLayer = L.layerGroup().addTo(map);
+                mapInitialized = true;
+
+                renderRoute();
+            } catch (e) {
+                console.error('Map init error:', e);
+                var loadingEl = document.getElementById('map-loading');
+                if (loadingEl) {
+                    loadingEl.innerHTML = '<p>Could not load map.<br>Schedule and stops available below.</p>';
+                }
+            }
+        }
+
+        function renderRoute() {
+            if (!mapInitialized || !map) return;
+
+            var route = routes[currentRoute];
+            
+            routeLayer.clearLayers();
+            markersLayer.clearLayers();
+            stopMarkers = [];
+
+            var routeCoords = route.stops.map(function(stop) { return stop.coords; });
+            var routeLine = L.polyline(routeCoords, {
+                color: route.color,
+                weight: 5,
+                opacity: 0.8
+            }).addTo(routeLayer);
+
+            route.stops.forEach(function(stop, index) {
+                var isActive = index === route.currentStop;
+                var isPassed = index < route.currentStop;
+                var size = isActive ? 20 : 14;
+                var bgColor = isPassed || isActive ? route.color : '#fff';
+
+                var markerHtml = '<div style="width:' + size + 'px;height:' + size + 'px;background:' + bgColor + ';border:3px solid ' + route.color + ';border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>';
+
+                var icon = L.divIcon({
+                    html: markerHtml,
+                    className: 'custom-stop-marker',
+                    iconSize: [size, size],
+                    iconAnchor: [size/2, size/2]
+                });
+
+                var marker = L.marker(stop.coords, { icon: icon }).addTo(markersLayer);
+                stopMarkers.push(marker);
+
+                var etaText = '';
+                if (isActive) {
+                    etaText = '<div class="popup-eta">Shuttle Here</div>';
+                } else if (index === route.currentStop + 1) {
+                    etaText = '<div class="popup-eta">Next Stop - 4 min</div>';
+                } else if (index > route.currentStop) {
+                    var mins = (index - route.currentStop) * 4;
+                    etaText = '<div class="popup-eta">' + mins + ' min away</div>';
+                }
+
+                marker.bindPopup('<div class="popup-title">' + stop.name + '</div><div class="popup-time">Next: ' + formatTime(stop.times[0]) + '</div>' + etaText);
+            });
+
+            var currentStopCoords = route.stops[route.currentStop].coords;
+            var shuttleHtml = '<div style="width:36px;height:36px;background:#301b41;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(48,27,65,0.4);"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/></svg></div>';
+
+            var shuttleIcon = L.divIcon({
+                html: shuttleHtml,
+                className: 'shuttle-marker',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+
+            L.marker(currentStopCoords, { 
+                icon: shuttleIcon,
+                zIndexOffset: 1000 
+            }).addTo(markersLayer);
+
+            map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+        }
+
+        function renderStopList() {
+            var route = routes[currentRoute];
+            var stopCountEl = document.getElementById('stop-count');
+            var stopListPanel = document.getElementById('stop-list-panel');
+            
+            if (stopCountEl) {
+                stopCountEl.textContent = route.stops.length + ' stops';
+            }
+            
+            if (!stopListPanel) return;
+            stopListPanel.innerHTML = '';
+            
+            route.stops.forEach(function(stop, index) {
+                var isActive = index === route.currentStop;
+                var isPassed = index < route.currentStop;
+                
+                var etaText = '';
+                if (isActive) {
+                    etaText = 'Here';
+                } else if (index === route.currentStop + 1) {
+                    etaText = '4 min';
+                } else if (index > route.currentStop) {
+                    etaText = ((index - route.currentStop) * 4) + ' min';
+                }
+                
+                var stopEl = document.createElement('div');
+                stopEl.className = 'stop-list-item' + (isActive ? ' active' : '') + (isPassed ? ' passed' : '');
+                stopEl.innerHTML = '<div class="stop-number">' + (index + 1) + '</div><div class="stop-list-info"><div class="stop-list-name">' + stop.name + '</div><div class="stop-list-time">Next: ' + formatTime(stop.times[0]) + '</div></div>' + (etaText ? '<span class="stop-list-eta">' + etaText + '</span>' : '');
+                
+                (function(idx, coords) {
+                    stopEl.addEventListener('click', function() {
+                        if (map && mapInitialized) {
+                            map.panTo(coords);
+                            map.setZoom(16);
+                            if (stopMarkers[idx]) {
+                                stopMarkers[idx].openPopup();
+                            }
+                        }
+                    });
+                })(index, stop.coords);
+                
+                stopListPanel.appendChild(stopEl);
+            });
+        }
+
+        function renderSchedule() {
+            var route = routes[currentRoute];
+            var scheduleRouteName = document.getElementById('schedule-route-name');
+            var scheduleTable = document.getElementById('schedule-table');
+            
+            if (scheduleRouteName) {
+                scheduleRouteName.textContent = route.name + ' Schedule';
+            }
+            
+            if (!scheduleTable) return;
+            
+            var html = '<div class="schedule-row header"><div class="schedule-cell stop-col">Stop</div><div class="schedule-cell time-col">Trip 1</div><div class="schedule-cell time-col">Trip 2</div><div class="schedule-cell time-col">Trip 3</div></div>';
+            
+            route.stops.forEach(function(stop) {
+                html += '<div class="schedule-row"><div class="schedule-cell stop-col">' + stop.name + '</div><div class="schedule-cell time-col">' + formatTime(stop.times[0]) + '</div><div class="schedule-cell time-col">' + formatTime(stop.times[1]) + '</div><div class="schedule-cell time-col">' + formatTime(stop.times[2]) + '</div></div>';
+            });
+
+            html += '<div class="trip-divider">Additional Trips</div>';
+
+            route.stops.forEach(function(stop) {
+                var index4 = stop.times[3] ? formatTime(stop.times[3]) : '--';
+                var index5 = stop.times[4] ? formatTime(stop.times[4]) : '--';
+                var index6 = stop.times[5] ? formatTime(stop.times[5]) : '--';
+                html += '<div class="schedule-row"><div class="schedule-cell stop-col">' + stop.name + '</div><div class="schedule-cell time-col">' + index4 + '</div><div class="schedule-cell time-col">' + index5 + '</div><div class="schedule-cell time-col">' + index6 + '</div></div>';
+            });
+            
+            scheduleTable.innerHTML = html;
+        }
+
+        function setupTabs() {
+            var tabBtns = document.querySelectorAll('.tab-btn');
+            var tabContents = document.querySelectorAll('.tab-content');
+            
+            tabBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var tabId = btn.getAttribute('data-tab');
+                    
+                    tabBtns.forEach(function(b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    
+                    tabContents.forEach(function(content) {
+                        content.classList.remove('active');
+                        if (content.id === tabId + '-tab') {
+                            content.classList.add('active');
+                        }
+                    });
+
+                    if (tabId === 'map' && map && mapInitialized) {
+                        setTimeout(function() { map.invalidateSize(); }, 100);
+                    }
+                });
+            });
+        }
+
+        function setupRouteCards() {
+            var routeCards = document.querySelectorAll('.route-card');
+            
+            routeCards.forEach(function(card) {
+                card.addEventListener('click', function() {
+                    routeCards.forEach(function(c) { c.classList.remove('active'); });
+                    card.classList.add('active');
+                    currentRoute = card.getAttribute('data-route');
+                    renderRoute();
+                    renderStopList();
+                    renderSchedule();
+                });
+            });
+        }
+
+        function simulateMovement() {
+            var route = routes[currentRoute];
+            if (route.status === 'running') {
+                route.currentStop = (route.currentStop + 1) % route.stops.length;
+                renderRoute();
+                renderStopList();
+            }
+        }
+
+        function init() {
+            setCurrentDate();
+            setupTabs();
+            setupRouteCards();
+            renderStopList();
+            renderSchedule();
+            
+            // Initialize map after a short delay to ensure DOM is ready
+            setTimeout(initMap, 100);
+            
+            setInterval(function() {
+                var now = new Date();
+                var timeEl = document.getElementById('last-updated-time');
+                if (timeEl) {
+                    timeEl.textContent = 'Updated at ' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                }
+            }, 60000);
+
+            setInterval(simulateMovement, 15000);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+    </script>
+</body>
+</html>
